@@ -6,3 +6,5 @@ seaborn
 psycopg2-binary
 dotenv
 catboost
+scikit-learn
+boto3
