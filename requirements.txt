@@ -5,3 +5,4 @@ matplotlib
 seaborn
 psycopg2-binary
 dotenv
+catboost
