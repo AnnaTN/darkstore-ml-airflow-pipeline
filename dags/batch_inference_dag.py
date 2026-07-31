@@ -60,8 +60,7 @@ def load_data_from_postgres(**context):
 
     CREATE TABLE inference_data_temp AS
 
-    SELECT
-        p.store,
+    SELECT p.store,
         p.dept,
         p.date,
         p.is_holiday,
