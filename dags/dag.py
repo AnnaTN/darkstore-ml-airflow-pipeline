@@ -196,7 +196,6 @@ def preprocess_features(**context):
         subset=model_features
     )
 
-
     ti.xcom_push(key='inference_df', value=inference_df.to_json())
 
     delete_table = """DROP TABLE inference_data_temp"""
