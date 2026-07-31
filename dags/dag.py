@@ -151,6 +151,7 @@ def preprocess_features(**context):
     """
     ti = context['ti']
     first_plan_date = ti.xcom_pull(task_ids='load_data', key='first_plan_date')
+    first_plan_date = pd.to_datetime(first_plan_date)
 
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
 
@@ -160,6 +161,8 @@ def preprocess_features(**context):
     ORDER BY store, dept, date"""
 
     inference_data_temp = hook.get_pandas_df(sql_query)
+
+    inference_data_temp['date'] = pd.to_datetime(inference_data_temp['date'])
 
     processed_df = preprocess_data(inference_data_temp)
 
@@ -328,7 +331,7 @@ def save_predictions_to_postgres(**context):
 # ========== Определение DAG ==========
 
 default_args = {
-    'owner': 'укажите-ваше-ФИО',
+    'owner': 'Туева Анна Николаевна',
     'depends_on_past': False,
     'email': ['best_data_scientist_in_the_world@example.com'],
     'email_on_failure': False,
