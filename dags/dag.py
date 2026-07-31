@@ -278,125 +278,32 @@ def run_batch_inference(**context):
 
 
 
-# def save_predictions_to_postgres(**context):
-#     """
-#     Запись результатов предсказаний в таблицу predictions в Postgres.
-
-#     1. Загрузите датафрейм с предсказаниями из XCom
-#     2. Подключение к БД, создание таблицы, вставка данных уже реализованы
-#     3. Выведите через print или logging.info количество строк итоговой таблицы и первые 5 строк.
-#     """
-#     ti = context['ti']
-#     predictions_json = ti.xcom_pull(task_ids='run_inference', key='final_df')
-    
-#     predictions_df = pd.read_json(predictions_json)
-    
-#     # Преобразуем date в правильный формат для PostgreSQL
-#     predictions_df['date'] = pd.to_datetime(predictions_df['date']).dt.date
-    
-#     # Подключение к БД
-#     pg_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-#     conn = pg_hook.get_conn()
-#     cursor = conn.cursor()
-    
-#     drop_table_query = """
-#     DROP TABLE IF EXISTS predictions;
-#     """
-#     cursor.execute(drop_table_query)
-#     conn.commit()
-
-#     create_table_query = """
-#     CREATE TABLE IF NOT EXISTS predictions (
-#         store INT,
-#         dept INT,
-#         date DATE,
-#         predicted_weekly_sales FLOAT,
-#         prediction_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-#         PRIMARY KEY (store, dept, date)
-#     );
-#     """
-#     cursor.execute(create_table_query)
-#     conn.commit()
-    
-#     from psycopg2.extras import execute_values
-    
-#     values = predictions_df[['store', 'dept', 'date', 'predicted_weekly_sales']].to_records(index=False).tolist()
-
-#     insert_query = """
-#     INSERT INTO predictions (store, dept, date, predicted_weekly_sales)
-#     VALUES %s
-#     ON CONFLICT (store, dept, date) 
-#     DO UPDATE SET 
-#         predicted_weekly_sales = EXCLUDED.predicted_weekly_sales,
-#         prediction_timestamp = CURRENT_TIMESTAMP;
-#     """
-    
-#     execute_values(cursor, insert_query, values)
-#     conn.commit()
-    
-#     # Напишите запрос для вывода количества строк полученной таблицы, а также первые ее 5 строк
-#     count_lines = pg_hook.get_first("SELECT COUNT(*) FROM predictions")[0]
-#     logging.info(f'Финальная таблица: {count_lines} строк')
-
-#     lines = pg_hook.get_records("SELECT * FROM predictions LIMIT 5")
-#     for line in lines:
-#         logging.info(line)
-
 def save_predictions_to_postgres(**context):
     """
     Запись результатов предсказаний в таблицу predictions в Postgres.
+
+    1. Загрузите датафрейм с предсказаниями из XCom
+    2. Подключение к БД, создание таблицы, вставка данных уже реализованы
+    3. Выведите через print или logging.info количество строк итоговой таблицы и первые 5 строк.
     """
-    ti = context["ti"]
-
-    logging.info("Получаем предсказания из XCom")
-
-    predictions_json = ti.xcom_pull(
-        task_ids="run_inference",
-        key="final_df"
-    )
-
-    logging.info("Преобразуем JSON в DataFrame")
-
-    predictions_df = pd.read_json(
-        io.StringIO(predictions_json)
-    )
-
-    logging.info(
-        "Получено строк для записи: %s",
-        len(predictions_df)
-    )
-
-    predictions_df["date"] = (
-        pd.to_datetime(predictions_df["date"]).dt.date
-    )
-
-    logging.info(
-        "Столбец date преобразован в формат PostgreSQL DATE"
-    )
-
-    logging.info(
-        "Подключаемся к PostgreSQL: %s",
-        POSTGRES_CONN_ID
-    )
-
-    pg_hook = PostgresHook(
-        postgres_conn_id=POSTGRES_CONN_ID
-    )
+    ti = context['ti']
+    predictions_json = ti.xcom_pull(task_ids='run_inference', key='final_df')
+    
+    predictions_df = pd.read_json(predictions_json)
+    
+    # Преобразуем date в правильный формат для PostgreSQL
+    predictions_df['date'] = pd.to_datetime(predictions_df['date']).dt.date
+    
+    # Подключение к БД
+    pg_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
-
-    logging.info("Подключение к PostgreSQL установлено")
-
+    
     drop_table_query = """
     DROP TABLE IF EXISTS predictions;
     """
-
-    logging.info("Начинаем удаление таблицы predictions")
-
     cursor.execute(drop_table_query)
     conn.commit()
-
-    logging.info("Таблица predictions удалена")
 
     create_table_query = """
     CREATE TABLE IF NOT EXISTS predictions (
@@ -404,96 +311,39 @@ def save_predictions_to_postgres(**context):
         dept INT,
         date DATE,
         predicted_weekly_sales FLOAT,
-        prediction_timestamp TIMESTAMP
-            DEFAULT CURRENT_TIMESTAMP,
+        prediction_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (store, dept, date)
     );
     """
-
-    logging.info("Начинаем создание таблицы predictions")
-
     cursor.execute(create_table_query)
     conn.commit()
-
-    logging.info("Таблица predictions создана")
-
+    
     from psycopg2.extras import execute_values
-
-    logging.info("Подготавливаем данные для вставки")
-
-    values = predictions_df[
-        [
-            "store",
-            "dept",
-            "date",
-            "predicted_weekly_sales"
-        ]
-    ].to_records(index=False).tolist()
-
-    logging.info(
-        "Подготовлено строк для вставки: %s",
-        len(values)
-    )
+    
+    values = predictions_df[['store', 'dept', 'date', 'predicted_weekly_sales']].to_records(index=False).tolist()
 
     insert_query = """
-    INSERT INTO predictions (
-        store,
-        dept,
-        date,
-        predicted_weekly_sales
-    )
+    INSERT INTO predictions (store, dept, date, predicted_weekly_sales)
     VALUES %s
-    ON CONFLICT (store, dept, date)
-    DO UPDATE SET
-        predicted_weekly_sales =
-            EXCLUDED.predicted_weekly_sales,
-        prediction_timestamp =
-            CURRENT_TIMESTAMP;
+    ON CONFLICT (store, dept, date) 
+    DO UPDATE SET 
+        predicted_weekly_sales = EXCLUDED.predicted_weekly_sales,
+        prediction_timestamp = CURRENT_TIMESTAMP;
     """
-
-    logging.info("Начинаем execute_values")
-
-    execute_values(
-        cursor,
-        insert_query,
-        values
-    )
-
-    logging.info(
-        "execute_values завершён, начинаем commit"
-    )
-
+    
+    execute_values(cursor, insert_query, values)
     conn.commit()
+    
+    # Напишите запрос для вывода количества строк полученной таблицы, а также первые ее 5 строк
+    count_lines = pg_hook.get_first("SELECT COUNT(*) FROM predictions")[0]
+    logging.info(f'Финальная таблица: {count_lines} строк')
 
-    logging.info("Commit завершён")
-
-    logging.info(
-        "Запрашиваем количество строк в predictions"
-    )
-
-    count_lines = pg_hook.get_first(
-        "SELECT COUNT(*) FROM predictions"
-    )[0]
-
-    logging.info(
-        "Финальная таблица: %s строк",
-        count_lines
-    )
-
-    logging.info(
-        "Запрашиваем первые пять строк predictions"
-    )
-
-    lines = pg_hook.get_records(
-        "SELECT * FROM predictions LIMIT 5"
-    )
-
+    lines = pg_hook.get_records("SELECT * FROM predictions LIMIT 5")
     for line in lines:
         logging.info(line)
+    cursor.close()
+    conn.close()
 
-    logging.info(
-        "Задача save_predictions завершена"
-    )
 
 
 
