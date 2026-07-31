@@ -179,9 +179,54 @@ def preprocess_features(**context):
     
     inference_df[lag_columns] = inference_df[lag_columns].fillna(0)
 
-    logging.info(f'Строк до dropna: {inference_df.shape[0]}')
-    inference_df = inference_df.dropna()
-    logging.info(f'Строк после dropna: {inference_df.shape[0]}')
+    model_features = [
+        "store",
+        "dept",
+        "is_holiday",
+        "type",
+        "size",
+        "factor3",
+        "factor5",
+        "month",
+        "quarter",
+        "avg_sales_before",
+        "sales_1week_ago",
+        "sales_2week_ago",
+        "sales_4week_ago",
+        "mean_sales_2week",
+        "mean_sales_4week",
+    ]
+
+    missing_counts = (
+        inference_df.isna()
+        .sum()
+        .sort_values(ascending=False)
+    )
+
+    logging.info(
+        "Пропуски перед dropna:\n%s",
+        missing_counts[missing_counts > 0].to_string(),
+    )
+
+    logging.info(
+        "Строк до dropna: %s",
+        len(inference_df),
+    )
+
+    inference_df = inference_df.dropna(
+        subset=model_features
+    )
+
+    logging.info(
+        "Строк после dropna: %s",
+        len(inference_df),
+    )
+
+    if inference_df.empty:
+        raise ValueError(
+            "После удаления пропусков датафрейм пуст"
+        )
+
 
     ti.xcom_push(key='inference_df', value=inference_df.to_json())
 
