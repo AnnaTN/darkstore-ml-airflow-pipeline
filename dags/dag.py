@@ -179,7 +179,9 @@ def preprocess_features(**context):
     
     inference_df[lag_columns] = inference_df[lag_columns].fillna(0)
 
+    logging.info(f'Строк до dropna: {inference_df.shape[0]}')
     inference_df = inference_df.dropna()
+    logging.info(f'Строк после dropna: {inference_df.shape[0]}')
 
     ti.xcom_push(key='inference_df', value=inference_df.to_json())
 
