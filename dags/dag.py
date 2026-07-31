@@ -299,11 +299,11 @@ def save_predictions_to_postgres(**context):
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
     
-    drop_table_query = """
-    DROP TABLE IF EXISTS predictions;
-    """
-    cursor.execute(drop_table_query)
-    conn.commit()
+    # drop_table_query = """
+    # DROP TABLE IF EXISTS predictions;
+    # """
+    # cursor.execute(drop_table_query)
+    # conn.commit()
 
     create_table_query = """
     CREATE TABLE IF NOT EXISTS predictions (
