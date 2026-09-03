@@ -1,6 +1,3 @@
-"""
-DAG для batch-инференса продаж "Прилавок"
-"""
 
 from datetime import datetime, timedelta
 from airflow import DAG
@@ -15,17 +12,17 @@ import logging
 import io
 import pickle
 
-# ========== Функция предобработки данных ==========
+
 from preprocessing import preprocess_data
 
-# ========== Конфигурация ==========
+
 
 S3_BUCKET = Variable.get("s3_bucket_name", default_var="your-bucket-name")
 S3_ACCESS_KEY = Variable.get("s3_access_key", default_var=None)
 S3_SECRET_KEY = Variable.get("s3_secret_key", default_var=None)
 S3_MODEL_KEY = Variable.get("s3_model_key", default_var="catboost_model.pkl")
 
-POSTGRES_CONN_ID = "postgres_sales_db"  # ID подключения в Airflow Connections
+POSTGRES_CONN_ID = "postgres_sales_db"
 
 RANDOM_STATE = 42
 CAT_FEATURES = ['store', 'dept', 'is_holiday', 'type']
@@ -33,26 +30,10 @@ CAT_FEATURES = ['store', 'dept', 'is_holiday', 'type']
 logger = logging.getLogger(__name__)
 
 
-# ========== Задачи DAG ==========
+
 
 def load_data_from_postgres(**context):
-    """
-    Загрузка данных для инференса из Postgres.
-    Загружаем таблицы plan, stores, features и исторические продажи для расчета лаговых признаков.
-    
-    Передавать большие данные через xcom_push нельзя!
-    Поэтому в данной функции создайте таблицу, которую будем использовать для предобработки данных (назовем ее inference_data_temp).
-    В этой таблице соберите исторические данные (до первой даты плана), а также плановые данные (столбец weekly_sales заполните null).
-    Здесь же соберите признаки из всех необходимых таблиц воедино.
 
-    После создания выведите информацию (можно через print(), можно через logging.info):
-    - количество строк в полученной таблице
-    - минимальная дата
-    - максимальная дата
-
-    В XCom передайте первую дату плана (по ней будем разделять все данные на обучающие и инференс).
-    
-    """
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
 
     create_inference_data_temp = """
@@ -135,19 +116,7 @@ def load_data_from_postgres(**context):
 
 
 def preprocess_features(**context):
-    """
-    Предобработка признаков для инференса.
-    
-    1. Читаем первую дату плана из XCom
-    2. Читаем данные из таблицы inference_data_temp
-    3. Выполняем предобработку признаков (функция preprocess_data)
-    4. Оставляем только строки, относящиеся к плану (дату берем из п.1)
-    5. Не забудьте удалить колонку weekly_sales (здесь она всегда будет заполнена null)
-    6. Лаговые переменные для первых недель стоит заполнить нулями.
-    7. Удаляем строки с оставшимися NaN
-    8. Передаем датафрейм в XCom (теперь он уже небольшой)
-    9. Удалим нашу временную таблицу inference_data_temp из БД
-    """
+
     ti = context['ti']
     first_plan_date = ti.xcom_pull(task_ids='load_data', key='first_plan_date')
     first_plan_date = pd.to_datetime(first_plan_date)
@@ -203,13 +172,7 @@ def preprocess_features(**context):
 
 
 def load_model_from_s3(**context):
-    """
-    Загрузка обученной модели CatBoost из S3 (Yandex Cloud) через pickle.
 
-    Клиент уже создан для вас. Необходимо загрузить модель используя io.BytesIO().
-    Сохраните модель во временный файл для передачи через XCom.
-    В XCom передайте путь до модели.
-    """
     import tempfile
     from io import BytesIO
     
@@ -235,17 +198,7 @@ def load_model_from_s3(**context):
 
 
 def run_batch_inference(**context):
-    """
-    Batch-инференс: применение модели к подготовленным данным.
-    
-    1. Из XCom загрузите подготовленный датафрейм для инференса и путь к обученной модели.
-    2. Прочитайте датафрейм используя pandas
-    3. Загрузите модель из pickle файла
-    4. Выполните predict
-    5. Сохраните предсказания в качестве нового столбца - predicted_weekly_sales
-    6. Обработайте аномальные предсказания (замените на 0)
-    7. Передайте в XCom датафрейм с предсказаниями (используйте .to_json())
-    """
+
     ti = context['ti']
 
     inference_df_json = ti.xcom_pull(task_ids='preprocess_features', key='inference_df')
@@ -278,31 +231,20 @@ def run_batch_inference(**context):
 
 
 def save_predictions_to_postgres(**context):
-    """
-    Запись результатов предсказаний в таблицу predictions в Postgres.
 
-    1. Загрузите датафрейм с предсказаниями из XCom
-    2. Подключение к БД, создание таблицы, вставка данных уже реализованы
-    3. Выведите через print или logging.info количество строк итоговой таблицы и первые 5 строк.
-    """
     ti = context['ti']
     predictions_json = ti.xcom_pull(task_ids='run_inference', key='final_df')
     
     predictions_df = pd.read_json(predictions_json)
     
-    # Преобразуем date в правильный формат для PostgreSQL
+
     predictions_df['date'] = pd.to_datetime(predictions_df['date']).dt.date
     
-    # Подключение к БД
+
     pg_hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
-    
-    # drop_table_query = """
-    # DROP TABLE IF EXISTS predictions;
-    # """
-    # cursor.execute(drop_table_query)
-    # conn.commit()
+
 
     create_table_query = """
     CREATE TABLE IF NOT EXISTS predictions (
@@ -332,8 +274,7 @@ def save_predictions_to_postgres(**context):
     
     execute_values(cursor, insert_query, values)
     conn.commit()
-    
-    # Напишите запрос для вывода количества строк полученной таблицы, а также первые ее 5 строк
+
     count_lines = pg_hook.get_first("SELECT COUNT(*) FROM predictions")[0]
     logging.info(f'Финальная таблица: {count_lines} строк')
 
@@ -345,8 +286,6 @@ def save_predictions_to_postgres(**context):
 
 
 
-
-# ========== Определение DAG ==========
 
 default_args = {
     'owner': 'Туева Анна Николаевна',
@@ -362,7 +301,7 @@ dag = DAG(
     'sales_prediction_batch_inference',
     default_args=default_args,
     description='Batch-инференс прогнозирования продаж для Прилавка',
-    schedule_interval='0 20 * * 0',  # Каждое воскресенье в 20:00
+    schedule_interval='0 20 * * 0', 
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['sales', 'ml', 'batch-inference', 'production'],
